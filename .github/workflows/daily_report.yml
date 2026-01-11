@@ -1,8 +1,8 @@
 name: Daily Flight Report
 on:
   schedule:
-    - cron: '0 5 * * *'  # 9:00 PM Los Angeles (05:00 UTC)
-    - cron: '0 17 * * *' # 9:00 AM Los Angeles (17:00 UTC)
+    - cron: '30 5 * * *'  # 9:30 PM Los Angeles (05:30 UTC)
+    - cron: '0 17 * * *'  # 9:00 AM Los Angeles (17:00 UTC)
   workflow_dispatch:      # Allows you to click a 'Run' button manually
 
 jobs:
