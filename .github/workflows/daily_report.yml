@@ -1,0 +1,24 @@
+name: Daily Flight Report
+on:
+  schedule:
+    - cron: '0 5 * * *'  # 9:00 PM Los Angeles (05:00 UTC)
+    - cron: '0 17 * * *' # 9:00 AM Los Angeles (17:00 UTC)
+  workflow_dispatch:      # Allows you to click a 'Run' button manually
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install requests sendgrid python-dotenv
+      - name: Run script
+        env:
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          OPEN_SKY_ID: ${{ secrets.OPEN_SKY_ID }}
+          OPEN_SKY_SECRET: ${{ secrets.OPEN_SKY_SECRET }}
+        run: python departure_email.py
