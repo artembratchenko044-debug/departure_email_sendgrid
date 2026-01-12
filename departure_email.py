@@ -84,10 +84,13 @@ recent_deps = [f for f in flights_24h if f.get('firstSeen', 0) >= two_hours_ago]
 departure_list = []
 for f in recent_deps:
     departure_list.append({
-        "airline": str((f.get('callsign') or 'N/A').strip()[:3]),
-        "departure_time": datetime.fromtimestamp(f.get('firstSeen', 0)).strftime('%H:%M'),
-        "arrival_airport": str(f.get('estArrivalAirport') or 'Unknown')
-    })
+                "airline": str((f.get('callsign') or 'N/A').strip()[:3]),
+                # Match your template tags exactly:
+                "departure_time": datetime.fromtimestamp(f.get('firstSeen', 0)).strftime('%H:%M'),
+                "arrival_time": datetime.fromtimestamp(f.get('lastSeen', 0)).strftime('%H:%M'),
+                "from": str(f.get('estDepartureAirport') or 'KLAX'),
+                "arrival": str(f.get('estArrivalAirport') or 'Unknown')
+            })
 
 email_data = {
     "first_name": "Artem",
