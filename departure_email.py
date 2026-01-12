@@ -25,111 +25,95 @@ def get_opensky_token():
     response = requests.post(auth_url, data=data)
     return response.json().get("access_token") if response.status_code == 200 else None
 
-# --- PROCESS ---
+def get_busiest_hour(flights, time_key):
+    if not flights: return "N/A"
+    hour_counts = {}
+    for f in flights:
+        hour = datetime.fromtimestamp(f.get(time_key, 0)).strftime('%I %p')
+        hour_counts[hour] = hour_counts.get(hour, 0) + 1
+    return max(hour_counts, key=hour_counts.get)
+
+# --- START PROCESS ---
 token = get_opensky_token()
+if not token:
+    print("❌ Auth failed")
+    exit()
 
-if token:
-    now_ts = int(time.time())
-    day_ago_ts = now_ts - 86400 # 24 hours ago
-    airport = "KLAX"
-    headers = {"Authorization": f"Bearer {token}"}
-    
-    # Request 24 hours of data for the chart
-    url = f"https://opensky-network.org/api/flights/departure?airport={airport}&begin={day_ago_ts}&end={now_ts}"
-    print(f"Fetching 24h LAX data...")
-    response = requests.get(url, headers=headers)
-    
-    if response.status_code == 200:
-        all_flights = response.json()
-        
-        # A. Filter for the Table (Last 2 Hours only)
-        two_hours_ago = now_ts - 7200
-        recent_flights = [f for f in all_flights if f.get('firstSeen', 0) >= two_hours_ago]
-        
-        departure_list = []
-        for f in recent_flights:
-            departure_list.append({
-                "airline": str((f.get('callsign') or 'N/A').strip()[:3]),
-                "departure_airport": str(f.get('estDepartureAirport') or 'KLAX'),
-                "arrival_airport": str(f.get('estArrivalAirport') or 'Unknown'),
-                "departure_time": datetime.fromtimestamp(f.get('firstSeen', 0)).strftime('%H:%M'),
-                "arrival_time": datetime.fromtimestamp(f.get('lastSeen', 0)).strftime('%H:%M')
-            })
+headers = {"Authorization": f"Bearer {token}"}
+airport = "KLAX"
+now_ts = int(time.time())
 
-       # B. Generate Chart Data (Last 24h in 1h blocks)
-        labels = []
-        counts = []
-        
-        print("Calculating hourly counts for the chart...")
-        for i in range(24, 0, -1):  
-            block_seconds = 3600 
-            block_end = now_ts - ((i-1) * block_seconds)
-            block_start = now_ts - (i * block_seconds)
-            
-            # Filter flights that fall within this specific hour
-            count = len([f for f in all_flights if block_start <= f.get('firstSeen', 0) < block_end])
-            
-            # Label every 4th hour to keep it very clean
-            time_label = datetime.fromtimestamp(block_start).strftime('%H:%M') if i % 4 == 0 else ""
-            
-            labels.append(time_label)
-            counts.append(count)
-            # This will show up in your GitHub Action logs:
-            if count > 0: print(f"Hour {time_label or '...'} had {count} flights")
+# --- 1. GET DATA FOR CHART (Last 24 Hours) ---
+day_ago_ts = now_ts - 86400
+url_24h = f"https://opensky-network.org/api/flights/departure?airport={airport}&begin={day_ago_ts}&end={now_ts}"
+flights_24h = requests.get(url_24h, headers=headers).json()
 
-        # C. Create the Plot (High Contrast Version)
-        plt.style.use('seaborn-v0_8-muted') # Ensures a clean, modern look
-        plt.figure(figsize=(10, 5))
-        
-        # We use a thick line and clear dots
-        plt.plot(range(24), counts, marker='o', color='#1a73e8', linewidth=3, markersize=6, label='Departures')
-        
-        # Fill the area under the line to make it visible
-        plt.fill_between(range(24), counts, color='#1a73e8', alpha=0.1)
-        
-        plt.xticks(range(24), labels, fontsize=10)
-        plt.title(f"LAX Departures per Hour (Last 24 Hours)", fontsize=14, pad=20)
-        plt.ylabel("Number of Flights", fontsize=12)
-        plt.grid(True, axis='y', linestyle='--', alpha=0.3)
-        
-        # IMPORTANT: Ensure the background isn't transparent
-        plt.gcf().set_facecolor('white')
-        
-        # Save to buffer
-        img_buffer = io.BytesIO()
-        plt.savefig(img_buffer, format='png', bbox_inches='tight', dpi=120, facecolor='white')
-        img_buffer.seek(0)
-        img_data = base64.b64encode(img_buffer.read()).decode()
-        plt.close()
+# --- 2. GET DATA FOR YESTERDAY SUMMARY ---
+today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+yesterday_start = today_start - timedelta(days=1)
+y_start_ts = int(yesterday_start.timestamp())
+y_end_ts = int(today_start.timestamp()) - 1
 
-        # D. Email Setup
-        formatted_now = datetime.now().strftime("%b %d, %Y - %H:%M")
-        email_data = {
-            "first_name": "Artem",
-            "email_sent_at": formatted_now,
-            "dep_count": len(departure_list),
-            "departures": departure_list
-        }
+y_deps = requests.get(f"https://opensky-network.org/api/flights/departure?airport={airport}&begin={y_start_ts}&end={y_end_ts}", headers=headers).json()
+y_arrs = requests.get(f"https://opensky-network.org/api/flights/arrival?airport={airport}&begin={y_start_ts}&end={y_end_ts}", headers=headers).json()
 
-        message = Mail(
-            from_email='artem.bratchenko044@gmail.com',
-            to_emails='nova.shift1996@proton.me'
-        )
-        message.template_id = 'd-0563ea372a754220bb62033c862c9d5c'
-        message.dynamic_template_data = email_data
+# --- 3. GENERATE THE CHART ---
+labels, counts = [], []
+for i in range(24, 0, -1):
+    b_start = now_ts - (i * 3600)
+    b_end = now_ts - ((i-1) * 3600)
+    count = len([f for f in flights_24h if b_start <= f.get('firstSeen', 0) < b_end])
+    labels.append(datetime.fromtimestamp(b_start).strftime('%H:%M') if i % 4 == 0 else "")
+    counts.append(count)
 
-        # E. Attach the Chart
-        attachment = Attachment()
-        attachment.file_content = FileContent(img_data)
-        attachment.file_type = FileType('image/png')
-        attachment.file_name = FileName('chart.png')
-        attachment.disposition = Disposition('inline')
-        attachment.content_id = ContentId('departure_chart') # Match this in your HTML!
-        message.add_attachment(attachment)
+plt.figure(figsize=(10, 5))
+plt.plot(range(24), counts, marker='o', color='#1a73e8', linewidth=3)
+plt.xticks(range(24), labels)
+plt.title("LAX Hourly Departures")
+plt.gcf().set_facecolor('white')
+img_buffer = io.BytesIO()
+plt.savefig(img_buffer, format='png', facecolor='white')
+img_buffer.seek(0)
+img_data = base64.b64encode(img_buffer.read()).decode()
+plt.close()
 
-        try:
-            sg = SendGridAPIClient(api_key)
-            sg.send(message)
-            print(f"✅ Email with Chart Sent! Total flights in table: {len(departure_list)}")
-        except Exception as e:
-            print(f"❌ SendGrid Error: {e}")
+# --- 4. PREPARE DATA FOR SENDGRID ---
+two_hours_ago = now_ts - 7200
+recent_deps = [f for f in flights_24h if f.get('firstSeen', 0) >= two_hours_ago]
+
+departure_list = []
+for f in recent_deps:
+    departure_list.append({
+        "airline": str((f.get('callsign') or 'N/A').strip()[:3]),
+        "departure_time": datetime.fromtimestamp(f.get('firstSeen', 0)).strftime('%H:%M'),
+        "arrival_airport": str(f.get('estArrivalAirport') or 'Unknown')
+    })
+
+email_data = {
+    "first_name": "Artem",
+    "email_sent_at": datetime.now().strftime("%b %d, %H:%M"),
+    "dep_count": len(departure_list),
+    "departures": departure_list,
+    "yesterday_date": yesterday_start.strftime("%A, %b %d"),
+    "y_total_deps": len(y_deps),
+    "y_total_arrs": len(y_arrs),
+    "y_busiest_dep_hour": get_busiest_hour(y_deps, 'firstSeen'),
+    "y_busiest_arr_hour": get_busiest_hour(y_arrs, 'lastSeen')
+}
+
+# --- 5. SEND EMAIL ---
+message = Mail(from_email='artem.bratchenko044@gmail.com', to_emails='nova.shift1996@proton.me')
+message.template_id = 'd-0563ea372a754220bb62033c862c9d5c'
+message.dynamic_template_data = email_data
+
+attachment = Attachment()
+attachment.file_content, attachment.file_type, attachment.file_name = FileContent(img_data), FileType('image/png'), FileName('chart.png')
+attachment.disposition, attachment.content_id = Disposition('inline'), ContentId('departure_chart')
+message.add_attachment(attachment)
+
+try:
+    sg = SendGridAPIClient(api_key)
+    sg.send(message)
+    print("✅ Success! Email sent with chart and stats.")
+except Exception as e:
+    print(f"❌ Error: {e}")
