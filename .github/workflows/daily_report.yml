@@ -15,7 +15,8 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: pip install requests sendgrid python-dotenv
+        # ADDED matplotlib HERE
+        run: pip install requests sendgrid python-dotenv matplotlib
       - name: Run script
         env:
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
