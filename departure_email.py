@@ -157,24 +157,3 @@ try:
 except Exception as e:
     print(f"❌ Push error: {e}")
 
-    # --- 7. SAVE TO LOG FILE ---
-import csv
-
-log_file = "flight_history.csv"
-file_exists = os.path.isfile(log_file)
-
-with open(log_file, mode='a', newline='') as f:
-    writer = csv.writer(f)
-    # Add header if the file is new
-    if not file_exists:
-        writer.writerow(["Date", "Time", "Recent_Deps_2h", "Yesterday_Total_Deps", "Yesterday_Total_Arrs"])
-    
-    # Add the data row
-    writer.writerow([
-        datetime.now().strftime("%Y-%m-%d"),
-        datetime.now().strftime("%H:%M"),
-        len(departure_list),
-        len(y_deps),
-        len(y_arrs)
-    ])
-print(f"✅ Success! Data logged to {log_file}")
