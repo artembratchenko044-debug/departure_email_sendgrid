@@ -120,3 +120,39 @@ try:
     print("✅ Success! Email sent with chart and stats.")
 except Exception as e:
     print(f"❌ Error: {e}")
+
+
+# --- 6. SEND ONESIGNAL PUSH ---
+onesignal_api_key = os.environ.get('ONESIGNAL_API_KEY')
+onesignal_app_id = "a10f1409-7129-4703-810f-dfcf43c7efb7"
+
+push_header = {
+    "Content-Type": "application/json; charset=utf-8",
+    "Authorization": f"Basic {onesignal_api_key}"
+}
+
+# Values to be injected
+count_val = str(len(departure_list))
+time_val = datetime.now().strftime("%b %d, %H:%M")
+
+push_payload = {
+    "app_id": onesignal_app_id,
+    "template_id": "05a11ed6-b5f1-42c3-9491-cd63443cbb38",
+    "included_segments": ["Total Subscriptions"],
+    # OneSignal uses 'data' for substitution variables in many template setups
+    "custom_data": {
+        "dep_count": count_val,
+        "push_sent_at": time_val
+    }
+}
+
+try:
+    push_response = requests.post(
+        "https://onesignal.com/api/v1/notifications",
+        headers=push_header,
+        json=push_payload
+    )
+    # Logging the response help us debug if it still fails
+    print(f"OneSignal Response: {push_response.text}") 
+except Exception as e:
+    print(f"❌ Push error: {e}")

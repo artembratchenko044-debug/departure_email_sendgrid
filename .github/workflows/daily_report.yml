@@ -22,4 +22,5 @@ jobs:
           SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
           OPEN_SKY_ID: ${{ secrets.OPEN_SKY_ID }}
           OPEN_SKY_SECRET: ${{ secrets.OPEN_SKY_SECRET }}
+          ONESIGNAL_API_KEY: ${{ secrets.ONESIGNAL_API_KEY }}
         run: python departure_email.py
